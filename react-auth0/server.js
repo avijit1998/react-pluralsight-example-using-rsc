@@ -1,0 +1,69 @@
+const express = require("express");
+require("dotenv").config();
+const jwt = require("express-jwt");
+const jwtRsa = require("jwks-rsa");
+const checkScope = require("express-jwt-authz");
+
+var checkJwt = jwt({
+  secret: jwtRsa.expressJwtSecret({
+    cache: true,
+    rateLimit: true,
+    jwksRequestsPerMinute: 5,
+    jwksUri: `https://${process.env.REACT_APP_AUTH0_DOMAIN}/.well-known/jwks.json`,
+  }),
+  audience: process.env.REACT_APP_AUTH0_AUDIENCE,
+  issuer: `https://${process.env.REACT_APP_AUTH0_DOMAIN}/`,
+  algorithms: ["RS256"],
+});
+
+const app = express();
+
+app.get("/public", function (req, res) {
+  res.json({
+    message: "Hello from a public API!",
+  });
+});
+
+app.get("/private", checkJwt, function (req, res) {
+  res.json({
+    message: "Hello from a private API!",
+  });
+});
+
+app.get("/courses", checkJwt, checkScope(["read:courses"]), function (
+  req,
+  res
+) {
+  res.json({
+    courses: [
+      {
+        id: 1,
+        title: "Getting started with Auth0",
+      },
+      {
+        id: 2,
+        title: "Intro to Express.",
+      },
+    ],
+  });
+});
+
+function checkRole(role) {
+  return function (req, res, next) {
+    const assignedRoles = req.user["http://localhost:3000/roles"];
+    if (Array.isArray(assignedRoles) && assignedRoles.includes(role)) {
+      return next();
+    } else {
+      return res.status(401).send("Insufficient role");
+    }
+  };
+}
+
+app.get("/admin", checkJwt, checkRole("admin"), function (req, res) {
+  res.json({
+    message: "Hello from a admin API!",
+  });
+});
+
+app.listen(3001);
+console.log("Api server listening on " + process.env.REACT_APP_AUTH0_AUDIENCE);
